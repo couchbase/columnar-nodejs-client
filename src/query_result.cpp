@@ -63,6 +63,15 @@ QueryResult::setQueryResult(couchbase::core::columnar::query_result query_result
   this->result_ = std::make_shared<couchbase::core::columnar::query_result>(query_result);
 }
 
+std::string
+QueryResult::clientContextId()
+{
+  if (this->pending_op_) {
+    return this->pending_op_->client_context_id();
+  }
+  return std::string();
+}
+
 Napi::Value
 QueryResult::jsNextRow(const Napi::CallbackInfo& info)
 {

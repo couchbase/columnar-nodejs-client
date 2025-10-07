@@ -68,12 +68,16 @@ Connection::Init(Napi::Env env, Napi::Object exports)
 Connection::Connection(const Napi::CallbackInfo& info)
   : Napi::ObjectWrap<Connection>(info)
 {
+  // We cannot create the Instance here b/c we need the timeout config.
+  // The instance will be created in jsConnect()
 }
 
 Connection::~Connection()
 {
-  _instance->asyncDestroy();
-  _instance = nullptr;
+  if (_instance != nullptr) {
+    _instance->asyncDestroy();
+    _instance = nullptr;
+  }
 }
 
 Napi::Value
@@ -269,6 +273,10 @@ Connection::jsQuery(const Napi::CallbackInfo& info)
                     couchbase::core::columnar::error err) mutable {
     try {
       if (err.ec) {
+        CB_LOG_DEBUG("NCBCC: columnar query error. ec={}, message={}, client_context_id={}.",
+                     err.ec.value(),
+                     err.message,
+                     queryResult->clientContextId());
         auto jsErr = cbpp_to_js(env, err);
         callback.Call({ jsErr });
       } else {

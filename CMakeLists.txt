@@ -22,6 +22,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project (couchbase_impl)
 
+function(get_couchnode_version)
+  execute_process(COMMAND node -e "console.log(JSON.parse(fs.readFileSync('${PROJECT_SOURCE_DIR}/package.json')).version)"
+                  OUTPUT_VARIABLE sdk_version)
+  string(STRIP "${sdk_version}" SDK_VERSION)
+  set(COUCHNODE_VERSION "${SDK_VERSION}" PARENT_SCOPE)
+endfunction()
+
 function(download_nodejs_headers)
   message("Finding Node.js headers SHA for version: ${NODE_RUNTIMEVERSION}")
   file(DOWNLOAD
@@ -62,9 +69,9 @@ function(download_nodejs_headers)
       nodejs_headers
       URL https://nodejs.org/dist/v${NODE_RUNTIMEVERSION}/node-v${NODE_RUNTIMEVERSION}-headers.tar.gz
       URL_HASH SHA256=${CB_NODE_VERSION_SHA256}
-      )  
+      )
   endif()
-  
+
   message("Downloading Node.js ${NODE_RUNTIMEVERSION} headers...")
   FetchContent_MakeAvailable(nodejs_headers)
   message("Downloaded Node.js ${NODE_RUNTIMEVERSION} headers to ${nodejs_headers_SOURCE_DIR}")
@@ -86,7 +93,7 @@ function(download_nodejs_win_lib)
     endif()
   endif()
   set(NODE_LIB_URL "${NODE_LIB_URL}/node.lib")
-  
+
   FetchContent_Declare(
     nodejs_win_lib
     URL ${NODE_LIB_URL}
@@ -161,7 +168,11 @@ endif()
 # We need to import headers globally for our dependant libraries such as couchbase-cxx-client.
 include_directories(${NODEJS_INC_DIR})
 
-set(COUCHBASE_CXX_CLIENT_COLUMNAR ON CACHE INTERNAL "")
+get_couchnode_version()
+message(STATUS "COUCHNODE_VERSION=${COUCHNODE_VERSION}")
+
+set(COUCHBASE_CXX_CLIENT_WRAPPER_UNIFIED_ID "nodejs/${COUCHNODE_VERSION}" CACHE STRING "" FORCE)
+set(COUCHBASE_CXX_CLIENT_COLUMNAR ON CACHE INTERNAL "" FORCE)
 set(COUCHBASE_CXX_CLIENT_BUILD_STATIC ON CACHE BOOL "" FORCE)
 set(COUCHBASE_CXX_CLIENT_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(COUCHBASE_CXX_CLIENT_BUILD_INSTALL OFF CACHE BOOL "" FORCE)
@@ -203,12 +214,11 @@ add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES} ${CMAKE_JS_SRC})
 
 add_definitions(-DNAPI_VERSION=6)
 set(COUCHBASE_CXX_SOURCE_DIR "${PROJECT_SOURCE_DIR}/deps/couchbase-cxx-client")
-message(STATUS "COUCHBASE_CXX_SOURCE_DIR=${COUCHBASE_CXX_SOURCE_DIR}")
 if(CMAKE_JS_VERSION VERSION_GREATER_EQUAL "7.0.0")
   target_include_directories(${PROJECT_NAME}
     PRIVATE ${NODEJS_INC_DIR}
-            "${COUCHBASE_CXX_SOURCE_DIR}"
             "${COUCHBASE_CXX_BINARY_DIR}/generated"
+            "${COUCHBASE_CXX_SOURCE_DIR}"
             "${COUCHBASE_CXX_SOURCE_DIR}/third_party/cxx_function"
             "${COUCHBASE_CXX_SOURCE_DIR}/third_party/expected/include")
 else()
@@ -235,7 +245,6 @@ target_link_libraries(${PROJECT_NAME}
   asio
   Microsoft.GSL::GSL
   taocpp::json
-  fmt::fmt
   spdlog::spdlog
 )
 
@@ -256,7 +265,7 @@ if(MSVC)
       # Do we want /OPT:ICF?
       set_target_properties(${PROJECT_NAME} PROPERTIES
         LINK_FLAGS "/INCREMENTAL:NO /DEBUG"
-        COMPILE_PDB_NAME ${PROJECT_NAME} 
+        COMPILE_PDB_NAME ${PROJECT_NAME}
         COMPILE_PDB_OUTPUT_DIR ${CMAKE_BINARY_DIR}
       )
   endif()
