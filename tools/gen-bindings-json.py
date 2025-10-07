@@ -32,11 +32,11 @@ CXX_CLIENT_CACHE = os.path.join(pathlib.Path(__file__).parent.parent, 'deps', 'c
 
 CXX_DEPS_INCLUDE_PATHS = {
     'asio': ['-I{0}/asio/{1}/asio/asio/include'],
-    'fmt': ['-I{0}/fmt/{1}/fmt/include'],
     'gsl': ['-I{0}/gsl/{1}/gsl/include'],
     'json': ['-I{0}/json/{1}/json/include',
              '-I{0}/json/{1}/json/external/PEGTL/include'
              ],
+    'spdlog': ['-I{0}/spdlog/{1}/spdlog/include'],
 }
 
 FILE_LIST = [
@@ -71,6 +71,7 @@ STD_COMPARATORS = list(reduce(lambda a, b: a + b,
 
 INTERNAL_STRUCTS = []
 UNNAMED_STRUCT_DELIM = '::(unnamed struct'
+TEMPLATED_REQUESTS = {}
 
 # END - CONFIGURATION
 
@@ -78,11 +79,11 @@ UNNAMED_STRUCT_DELIM = '::(unnamed struct'
 class BindingsGenerator:
 
     def __init__(self,
-                 llvm_clang_version: Optional[str]=None,
-                 llvm_libdir: Optional[str]=None,
-                 llvm_includedir: Optional[str]=None,
-                 system_headers: Optional[str]=None,
-                 verbose: Optional[bool]=False) -> None:
+                 llvm_clang_version: Optional[str] = None,
+                 llvm_libdir: Optional[str] = None,
+                 llvm_includedir: Optional[str] = None,
+                 system_headers: Optional[str] = None,
+                 verbose: Optional[bool] = False) -> None:
         self._op_types = []
         self._op_enums = []
         self._full_file_list = []
@@ -92,10 +93,10 @@ class BindingsGenerator:
         self.configure_generator(llvm_clang_version, llvm_libdir, llvm_includedir, system_headers)
 
     def configure_generator(self,
-                            version: Optional[str]=None,
-                            libdir: Optional[str]=None,
-                            includedir: Optional[str]=None,
-                            system_headers: Optional[str]=None) -> None:
+                            version: Optional[str] = None,
+                            libdir: Optional[str] = None,
+                            includedir: Optional[str] = None,
+                            system_headers: Optional[str] = None) -> None:
         if version is None:
             version = os.environ.get('CN_LLVM_VERSION')
         if version is None:
@@ -103,6 +104,20 @@ class BindingsGenerator:
             version = BindingsGenerator.get_llvm_version()
         if version is None:
             raise ValueError('Missing LLVM version.')
+
+        print(f'Using version={version}')
+        llvm_root_dir = f'/opt/homebrew/Cellar/llvm/{version}'
+        if not os.path.exists(llvm_root_dir):
+            print(f'LLVM root directory ({llvm_root_dir}) does not exist. Attempting to find it.')
+            llvm_root_dir = None
+            for d in os.listdir(f'/opt/homebrew/Cellar/llvm'):
+                if d.startswith(version):
+                    llvm_root_dir = os.path.join('/opt/homebrew/Cellar/llvm', d)
+                    print(f'Found LLVM root directory: {llvm_root_dir}')
+                    break
+            if llvm_root_dir is None:
+                raise ValueError((f'Unable to find LLVM root directory for version {version}.'
+                                  'Please use CN_LLVM_VERSION to override.'))
 
         if includedir is None:
             includedir = os.environ.get('CN_LLVM_INCLUDE')
@@ -117,14 +132,14 @@ class BindingsGenerator:
             libdir = BindingsGenerator.get_llvm_libdir()
         if libdir is None:
             raise ValueError('Missing LLVM lib directory.')
-        
+
         if system_headers is None:
             system_headers = os.environ.get('CN_SYS_HEADERS')
         if system_headers is None:
             system_headers = BindingsGenerator.get_system_headers()
         if system_headers is None:
             raise ValueError('Missing system headers path.')
-        
+
         if self._verbose:
             print(f'Using libdir={libdir}')
         clang.cindex.Config.set_library_path(libdir)
@@ -132,7 +147,7 @@ class BindingsGenerator:
         self._include_paths = [
             '-I/opt/homebrew/opt/llvm/include/c++/v1',
             f'-I{CXX_CLIENT_ROOT}/',
-            f'-I/opt/homebrew/Cellar/llvm/{version}/lib/clang/{version[:2]}/include',
+            f'-I{llvm_root_dir}/lib/clang/{version[:2]}/include',
             f'-I{system_headers}/usr/include'
         ]
 
@@ -161,7 +176,6 @@ class BindingsGenerator:
                     diagnosticMsg = diagnostic.format()
                     print(diagnostic)
 
-            
             self.traverse(translation_unit.cursor, [], headerPath)
 
         jsonData = json.dumps({
@@ -201,7 +215,7 @@ class BindingsGenerator:
 
     def traverse(self, node, namespace, main_file) -> None:
         # only scan the elements of the file we parsed
-        if node.location.file != None and node.location.file.name != main_file:
+        if node.location.file is not None and node.location.file.name != main_file:
             return
 
         if node.kind == clang.cindex.CursorKind.STRUCT_DECL or node.kind == clang.cindex.CursorKind.CLASS_DECL:
@@ -216,8 +230,9 @@ class BindingsGenerator:
                     full_struct_name = match
 
             if (BindingsGenerator.is_included_type(full_struct_name, self._type_list_re)
-                or full_struct_name in INTERNAL_STRUCTS):
+                    or full_struct_name in INTERNAL_STRUCTS):
                 struct_fields = []
+                parents = []
                 for child in node.get_children():
                     if child.kind == clang.cindex.CursorKind.FIELD_DECL:
                         struct_type = BindingsGenerator.parse_type(child.type)
@@ -232,6 +247,15 @@ class BindingsGenerator:
                             "name": child.displayname,
                             "type": struct_type,
                         })
+                    elif child.kind == clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
+                        parents.append("::".join([*namespace, child.displayname]))
+
+                if len(parents) > 0:
+                    part_op_types = [ot for ot in self._op_types if ot['name'] in parents]
+                    print(f'{part_op_types=}')
+                    for sot in part_op_types:
+                        struct_fields.extend(sot['fields'])
+
                 # replica read changes introduced duplicate get requests
                 if any(map(lambda op: op['name'] == full_struct_name, self._op_types)):
                     return
@@ -250,9 +274,9 @@ class BindingsGenerator:
                     if base_request:
                         new_fields = [f for f in base_request['fields'] if f['name'] != 'durability_level']
                         new_fields.extend([
-                                {"name":"persist_to", "type":{"name":"couchbase::persist_to"}},
-                                {"name":"replicate_to", "type":{"name":"couchbase::replicate_to"}}
-                            ])
+                            {"name": "persist_to", "type": {"name": "couchbase::persist_to"}},
+                            {"name": "replicate_to", "type": {"name": "couchbase::replicate_to"}}
+                        ])
 
                         self._op_types.append({
                             "name": full_struct_name,
@@ -281,6 +305,32 @@ class BindingsGenerator:
             namespace = [*namespace, node.displayname]
         if node.kind == clang.cindex.CursorKind.STRUCT_DECL:
             namespace = [*namespace, node.displayname]
+        if node.kind == clang.cindex.CursorKind.CLASS_TEMPLATE:
+            name_tokens = node.displayname.split('<')
+            if len(name_tokens) == 2 and name_tokens[0] in TEMPLATED_REQUESTS:
+                req = TEMPLATED_REQUESTS.get(name_tokens[0])
+                full_struct_name = "::".join([*namespace, node.displayname])
+                for template in req['templates']:
+                    struct_fields = []
+                    for child in node.get_children():
+                        if child.kind == clang.cindex.CursorKind.FIELD_DECL:
+                            type_str = child.type.get_canonical().spelling
+                            if 'type-parameter' in type_str:
+                                struct_type = {
+                                    'name': 'template',
+                                    'of': {'name': template}}
+                            else:
+                                struct_type = BindingsGenerator.parse_type(child.type)
+                            # can be useful for debugging
+                            # print(f'struct_type={child.type}; type.kind={child.type.kind}; {type_str=}, displayname={child.displayname}')
+                            struct_fields.append({
+                                "name": child.displayname,
+                                "type": struct_type,
+                            })
+                    self._op_types.append({
+                        "name": full_struct_name.replace(req['template_name'], template),
+                        "fields": struct_fields,
+                    })
 
         for child in node.get_children():
             self.traverse(child, namespace, main_file)
@@ -296,14 +346,14 @@ class BindingsGenerator:
             raise Exception(f'Unable to find CPM hash directory for path: {cpm_path}.')
         return list(map(lambda p: p.format(CXX_CLIENT_CACHE, cpm_hash_dir), includes))
 
-    @staticmethod    
-    def list_headers_in_dir(path: str, file_startswith: Optional[str]=None) -> List[str]:
+    @staticmethod
+    def list_headers_in_dir(path: str, file_startswith: Optional[str] = None) -> List[str]:
         # enumerates a folder but keeps the full pathing for the files returned
         # and removes certain files we don't want (like non-hxx, _json.hxx or _fmt.hxx)
 
         # list all the files in the folder
         files = os.listdir(path)
-        
+
         if file_startswith is not None:
             files = list(filter(lambda f: f.endswith('.hxx') and f.startswith(file_startswith), files))
             # add the folder path back on
@@ -314,9 +364,9 @@ class BindingsGenerator:
             # add the folder path back on
             files = list(map(lambda f: path + f, files))
         return files
-    
+
     @staticmethod
-    def is_included_type(name: str, type_list_re: List[str], with_durability: Optional[bool]=False) -> bool:
+    def is_included_type(name: str, type_list_re: List[str], with_durability: Optional[bool] = False) -> bool:
 
         # TODO(brett19): This should be generalized somehow...
         if "is_compound_operation" in name:
@@ -332,13 +382,13 @@ class BindingsGenerator:
             if re.fullmatch(x, name):
                 return True
         return False
-    
+
     @staticmethod
-    def parse_type(type_: str) -> str:
+    def parse_type(type_: str) -> Dict[str, str]:
         type_str = type_.get_canonical().spelling
         return BindingsGenerator.parse_type_str(type_str)
 
-    @staticmethod    
+    @staticmethod
     def parse_type_str(type_str: str) -> Dict[str, str]:
         if type_str == "std::mutex":
             return {"name": "std::mutex"}
@@ -466,9 +516,8 @@ class BindingsGenerator:
 
         return {"name": type_str}
 
-
     @staticmethod
-    def sh(command: str, piped: Optional[bool]=False) -> Tuple[str, int]:
+    def sh(command: str, piped: Optional[bool] = False) -> Tuple[str, int]:
         try:
             if piped is True:
                 proc = subprocess.Popen(command,
@@ -498,7 +547,7 @@ class BindingsGenerator:
             if 'llvm' not in output.strip():
                 # TODO: aarch64 v. x86_64
                 os_path = os.environ.get('PATH').split(':')
-                os_path = ['/opt/homebrew/opt/llvm/bin'] + os_path                
+                os_path = ['/opt/homebrew/opt/llvm/bin'] + os_path
                 os.environ.update(**{'PATH': ':'.join(os_path)})
             output, err = BindingsGenerator.sh('which clang')
             if err:
@@ -509,7 +558,7 @@ class BindingsGenerator:
             print('Under construction')
         else:
             raise ValueError('Unsupported platform')
-        
+
     @staticmethod
     def get_llvm_version() -> str:
         output, err = BindingsGenerator.sh('llvm-config --version')
@@ -543,6 +592,7 @@ class BindingsGenerator:
         else:
             raise ValueError('Unsupported platform')
 
+
 if __name__ == '__main__':
     from argparse import ArgumentParser
     ap = ArgumentParser(description='Parse git version to PEP-440 version')
@@ -558,16 +608,17 @@ if __name__ == '__main__':
     ap.add_argument('-s',
                     '--system-headers',
                     help='SET CN_SYS_HEADERS, or use command: xcrun --show-sdk-path')
+    ap.add_argument('--verbose',
+                    action='store_true',
+                    help='Run in verbose mode',)
     options = ap.parse_args()
-    
+
     generator = BindingsGenerator(options.version,
                                   options.libdir,
                                   options.includedir,
-                                  options.system_headers)
+                                  options.system_headers,
+                                  options.verbose)
     generator.gen_bindings()
-
-
-
 
 
 """

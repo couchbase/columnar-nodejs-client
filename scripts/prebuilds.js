@@ -114,6 +114,19 @@ function buildBinary(
     cmakejsBuildCmd.push(...['--config', `${buildConfig}`])
   }
 
+  const sanitizers = process.env.CN_SANITIZERS
+  if (sanitizers && sanitizers.length > 0) {
+    for (const sanitizer of sanitizers.split(',')) {
+      if (
+        ['address', 'thread', 'undefined', 'memory', 'leak'].includes(sanitizer)
+      ) {
+        cmakejsBuildCmd.push(
+          `--CDENABLE_SANITIZER_${sanitizer.toUpperCase()}=ON`
+        )
+      }
+    }
+  }
+
   const cmakeGeneratorPlatform = process.env.CN_CMAKE_GENERATOR_PLATFORM
   if (cmakeGeneratorPlatform) {
     cmakejsBuildCmd.push(`--generator=${cmakeGeneratorPlatform}`)
@@ -208,6 +221,27 @@ function configureBinary(
     '--parallel',
     cmakeParallel,
   ]
+
+  const buildConfig = process.env.CN_BUILD_CONFIG
+  if (
+    buildConfig &&
+    ['Debug', 'Release', 'RelWithDebInfo'].includes(buildConfig)
+  ) {
+    cmakejsBuildCmd.push(...['--config', `${buildConfig}`])
+  }
+
+  const sanitizers = process.env.CN_SANITIZERS
+  if (sanitizers && sanitizers.length > 0) {
+    for (const sanitizer of sanitizers.split(',')) {
+      if (
+        ['address', 'thread', 'undefined', 'memory', 'leak'].includes(sanitizer)
+      ) {
+        cmakejsBuildCmd.push(
+          `--CDENABLE_SANITIZER_${sanitizer.toUpperCase()}=ON`
+        )
+      }
+    }
+  }
 
   if (setCpmCache) {
     if (fs.existsSync(CXXCBC_CACHE_DIR)) {
