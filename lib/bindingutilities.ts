@@ -52,7 +52,10 @@ export function errorFromCpp(err: CppColumnarError | null): Error | null {
 
   // TODO:  handle other client_errc
   if (err.client_err_code && err.client_err_code === 'canceled') {
-    return new errs.OperationCanceledError(err.message_and_ctx)
+    return new errs.ColumnarError(
+      err.message_and_ctx,
+      new errs.OperationCanceledError(err.message)
+    )
   }
 
   switch (err.code) {

@@ -22,9 +22,12 @@
  * @category Error Handling
  */
 export class ColumnarError extends Error {
-  constructor(message: string) {
+  cause: Error | undefined
+
+  constructor(message: string, cause?: Error) {
     super(message)
     this.name = this.constructor.name
+    this.cause = cause
   }
 }
 

@@ -25,7 +25,6 @@ import {
 import { errorFromCpp, queryScanConsistencyToCpp } from './bindingutilities'
 import { Cluster } from './cluster'
 import { CppColumnarQueryResult, CppColumnarError } from './binding'
-import { OperationCanceledError } from './errors'
 
 /**
  * @internal
@@ -203,7 +202,7 @@ export class QueryExecutor {
         },
         (cppErr) => {
           const err = errorFromCpp(cppErr)
-          if (err && !(err instanceof OperationCanceledError)) {
+          if (err && !this._signal.aborted) {
             reject(err)
             return
           }
