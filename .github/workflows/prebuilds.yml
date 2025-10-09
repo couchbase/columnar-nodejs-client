@@ -50,7 +50,7 @@ on:
 
 
 env:
-  DEFAULT_NODE: "18"
+  DEFAULT_NODE: "20"
 
 
 jobs:
@@ -82,11 +82,12 @@ jobs:
     needs: validate-input
     strategy:
       matrix:
-        node-version: ["18.x"]
+        node-version: ["20.x"]
+
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
       - name: Confirm Node version
@@ -147,7 +148,7 @@ jobs:
         env:
           CXX_CHG: ${{ inputs.cxx_change }}
       - name: Setup Node.js ${{ env.DEFAULT_NODE }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.DEFAULT_NODE }}
       - name: Confirm Node.js version
@@ -230,14 +231,17 @@ jobs:
 
   linux-prebuilds:
     needs: sdist
-    name: Build prebuild for linux on ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
       matrix:
-        os: ['ubuntu-22.04']
-        node-version: ["16"]
-        arch: ['x86_64', "arm64"]
+        include:
+          - os: ubuntu-22.04
+            node-version: "16"
+            arch: "x86_64"
+          - os: ubuntu-22.04-arm
+            node-version: "16"
+            arch: "arm64"
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -249,11 +253,6 @@ jobs:
           tar -xvzf $SDIST_NAME.tgz
           cp -r package/** .
           rm -rf package
-      - name: Set up QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -320,14 +319,17 @@ jobs:
 
   alpine-prebuilds:
     needs: sdist
-    name: Build prebuild for alpine on ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
       matrix:
-        os: ['ubuntu-22.04']
-        node-version: ["18"]
-        arch: ['x86_64', "arm64"]
+        include:
+          - os: ubuntu-22.04
+            node-version: "18"
+            arch: "x86_64"
+          - os: ubuntu-22.04-arm
+            node-version: "18"
+            arch: "arm64"
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -339,11 +341,6 @@ jobs:
           tar -xvzf $SDIST_NAME.tgz
           cp -r package/** .
           rm -rf package
-      - name: Set up QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -410,7 +407,6 @@ jobs:
 
   macos-prebuilds:
     needs: sdist
-    name: Build prebuild for macos on ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -438,7 +434,7 @@ jobs:
         with:
           key: ${{ github.job }}-macos-${{ matrix.arch }}-node${{ matrix.node-version }}
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
       - name: Confirm Node version
@@ -506,7 +502,6 @@ jobs:
 
   windows-prebuilds:
     needs: sdist
-    name: Build prebuild for Windows on ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -531,7 +526,7 @@ jobs:
         run: |
           choco install --no-progress nasm
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
       - name: Confirm Node version
@@ -581,20 +576,13 @@ jobs:
 
   validate-linux-prebuilds:
     needs: linux-prebuilds
-    name: Validate Node.js ${{ matrix.node-version }} prebuild for linux (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ['ubuntu-22.04']
-        node-version: ["16", "18", "20"]
-        arch: ['x86_64', 'arm64']
+        os: ["ubuntu-22.04", "ubuntu-22.04-arm"]
+        node-version: ["20", "22", "24"]
     steps:
-      - name: Set up QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
       - uses: actions/download-artifact@v4
         with:
           name: ncbcc-sdist
@@ -603,50 +591,40 @@ jobs:
           mkdir -p prebuilds
       - uses: actions/download-artifact@v4
         with:
-          name: linux-${{ matrix.arch }}-prebuild
+          name: linux-${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'x86_64' }}-prebuild
           path: prebuilds
-      - name: Run in docker
-        uses: addnab/docker-run-action@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
         with:
-          image: node:${{ matrix.node-version }}-bullseye-slim
-          options: >-
-            --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64'}}
-            -v ${{ github.workspace }}:/work
-          run: |
-            node --version
-            cd /work
-            ls -alh
-            npm init -y
-            echo "columnar_local_prebuilds=/work/prebuilds" >> .npmrc
-            cat .npmrc
-            PKG=$(find . -name '*.tgz' | cut -c 3-)
-            npm install $PKG
-            node -p "JSON.parse(require('couchbase-columnar').cbppMetadata)"
+          node-version: ${{ matrix.node-version }}
+      - name: Validate prebuild
+        run: |
+          node --version
+          ls -alh
+          npm init -y
+          echo "columnar_local_prebuilds=${{ github.workspace }}/prebuilds" >> .npmrc
+          cat .npmrc
+          PKG=$(find . -name '*.tgz' | cut -c 3-)
+          npm install $PKG
+          node -p "JSON.parse(require('couchbase-columnar').cbppMetadata)"
       - name: Upload Node.js prebuild as artifact
         if: ${{ matrix.node-version == env.DEFAULT_NODE }}
         uses: actions/upload-artifact@v4
         with:
           retention-days: 1
-          name: ncbcc-artifact-linux-${{ matrix.arch }}-prebuild
+          name: ncbcc-artifact-linux-${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'x86_64' }}-prebuild
           path: prebuilds/*.node
 
 
   validate-alpine-prebuilds:
     needs: alpine-prebuilds
-    name: Validate Node.js ${{ matrix.node-version }} prebuild for alpine (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ['ubuntu-22.04']
-        node-version: ["16", "18", "20"]
-        arch: ['x86_64', 'arm64']
+        os: ["ubuntu-22.04", "ubuntu-22.04-arm"]
+        node-version: ["20", "22", "24"]
     steps:
-      - name: Set up QEMU
-        if: ${{ matrix.arch == 'arm64' }}
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
       - uses: actions/download-artifact@v4
         with:
           name: ncbcc-sdist
@@ -655,14 +633,30 @@ jobs:
           mkdir prebuilds
       - uses: actions/download-artifact@v4
         with:
-          name: linuxmusl-${{ matrix.arch }}-prebuild
+          name: linuxmusl-${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'x86_64' }}-prebuild
           path: prebuilds
+      - name: Cache Docker image
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker_node_image.tar # Path to store the image archive
+          key: docker-image-node-${{ matrix.node-version }}-alpine
+      - name: Pull and save image if not cached
+        run: |
+          if [ ! -f /tmp/docker_node_image.tar ]; then
+            docker pull node:${{ matrix.node-version }}-alpine
+            docker save node:${{ matrix.node-version }}-alpine -o /tmp/docker_node_image.tar
+          fi
+      - name: Load image if cached
+        run: |
+          if [ -f /tmp/docker_node_image.tar ]; then
+            docker load -i /tmp/docker_node_image.tar
+          fi
       - name: Run in docker
         uses: addnab/docker-run-action@v3
         with:
           image: node:${{ matrix.node-version }}-alpine
           options: >-
-            --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64'}}
+            --platform linux/${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'amd64' }}
             -v ${{ github.workspace }}:/work
           run: |
             node --version
@@ -679,22 +673,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           retention-days: 1
-          name: ncbcc-artifact-linuxmusl-${{ matrix.arch }}-prebuild
+          name: ncbcc-artifact-linuxmusl-${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'x86_64' }}-prebuild
           path: prebuilds/*.node
 
 
   validate-macos-prebuilds:
     needs: macos-prebuilds
-    name: Validate Node.js ${{ matrix.node-version }} prebuild for macos (${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: ["macos-13", "macos-14"]
-        node-version: ["16", "18", "20"]
+        node-version: ["20", "22", "24"]
     steps:
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
       - name: Confirm Node version
@@ -730,17 +723,16 @@ jobs:
 
   validate-windows-prebuilds:
     needs: windows-prebuilds
-    name: Validate Node.js ${{ matrix.node-version }} prebuild Windows (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: ["windows-latest"]
-        node-version: ["16", "18", "20"]
+        node-version: ["20", "22", "24"]
         arch: ["x86_64"]
     steps:
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
       - name: Confirm Node version

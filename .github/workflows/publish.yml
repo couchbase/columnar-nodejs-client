@@ -45,7 +45,7 @@ on:
         type: string
 
 env:
-  DEFAULT_NODE: "18"
+  DEFAULT_NODE: "20"
 
 jobs:
   validate-input:
@@ -148,7 +148,7 @@ jobs:
           ref: ${{ inputs.sha }}
           fetch-depth: 0
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.DEFAULT_NODE }}
       - name: Confirm Node version
@@ -262,7 +262,7 @@ jobs:
           run-id: ${{ inputs.prebuilds_run_id }}
           github-token: ${{ github.token }}
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.DEFAULT_NODE }}
           registry-url: 'https://registry.npmjs.org'
