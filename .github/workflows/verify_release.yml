@@ -135,7 +135,7 @@ jobs:
         run: |
           env
           node --version
-          cd /ncbcc
+          cd ncbcc
           ls -alh
           npm init -y
           npm install ini
@@ -149,7 +149,7 @@ jobs:
         run: |
           env
           node --version
-          cd /ncbcc
+          cd ncbcc
           ls -alh
           npm init -y
           npm install ini
