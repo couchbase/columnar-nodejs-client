@@ -49,6 +49,9 @@ on:
         value: ${{ github.run_id }}
 
 
+permissions:
+  contents: read
+
 env:
   DEFAULT_NODE: "20"
 
@@ -412,10 +415,10 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - os: macos-13
+          - os: macos-15-intel
             node-version: "18.x"
             arch: "x86_64"
-          - os: macos-14
+          - os: macos-15
             node-version: "18.x"
             arch: "arm64"
     steps:
@@ -683,7 +686,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["macos-13", "macos-14"]
+        os: ["macos-15-intel", "macos-15"]
         node-version: ["20", "22", "24"]
     steps:
       - name: Setup Node.js
@@ -704,7 +707,7 @@ jobs:
           cat .npmrc
       - uses: actions/download-artifact@v4
         with:
-          name: macos-${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }}-prebuild
+          name: macos-${{ matrix.os == 'macos-15' && 'arm64' || 'x86_64' }}-prebuild
           path: prebuilds
       - name: Install w/ prebuild
         run: |
@@ -717,7 +720,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           retention-days: 1
-          name: ncbcc-artifact-macos-${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }}-prebuild
+          name: ncbcc-artifact-macos-${{ matrix.os == 'macos-15' && 'arm64' || 'x86_64' }}-prebuild
           path: prebuilds/*.node
 
 
