@@ -15,6 +15,8 @@
  *  limitations under the License.
  */
 
+'use strict'
+
 const fs = require('fs')
 const path = require('path')
 var proc = require('child_process')
@@ -35,15 +37,15 @@ const platform = process.platform
 const libc = getLinuxType(platform)
 const sslType = getSSLType(runtime, nodeVersion)
 
-CN_ROOT = path.resolve(path.dirname(__filename), '..')
+const CN_ROOT = path.resolve(path.dirname(__filename), '..')
 // CN_CXXCBC_CACHE_DIR should only need to be used on Windows when setting the CPM cache (CN_SET_CPM_CACHE=ON).
 // It helps prevent issues w/ path lengths.
 // NOTE: Setting the CPM cache on a Windows machine should be a _rare_ occasion.  When doing so and setting
 // CN_CXXCBC_CACHE_DIR, be sure to copy the cache to <root source dir>\deps\couchbase-cxx-cache if building a sdist.
-CXXCBC_CACHE_DIR =
+const CXXCBC_CACHE_DIR =
   process.env.CN_CXXCBC_CACHE_DIR ||
   path.join(CN_ROOT, 'deps', 'couchbase-cxx-cache')
-ENV_TRUE = ['true', '1', 'y', 'yes', 'on']
+const ENV_TRUE = ['true', '1', 'y', 'yes', 'on']
 
 function buildBinary(
   runtime,

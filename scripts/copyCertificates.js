@@ -15,15 +15,17 @@
  *  limitations under the License.
  */
 
+'use strict'
+
 const fs = require('fs')
 const path = require('path')
 
-CERTIFICATE_DIR = path.join(
+const CERTIFICATE_DIR = path.join(
   path.resolve(__dirname, '..'),
   'lib',
   'nonProdCertificates'
 )
-DIST_CERTIFICATE_DIR = path.join(
+const DIST_CERTIFICATE_DIR = path.join(
   path.resolve(__dirname, '..'),
   'dist',
   'nonProdCertificates'
