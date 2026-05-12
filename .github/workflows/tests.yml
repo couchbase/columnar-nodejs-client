@@ -68,6 +68,10 @@ on:
         default: ""
         type: string
 
+permissions:
+  contents: read
+  actions: read
+
 env:
   DEFAULT_NODE: "20"
 
@@ -330,7 +334,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["macos-13", "macos-14"]
+        os: ["macos-15-intel", "macos-15"]
         node-version: ["20", "22", "24"]
     steps:
       - name: Setup Node.js
@@ -351,7 +355,7 @@ jobs:
       - name: Download prebuild
         uses: actions/download-artifact@v4
         with:
-          name: ncbcc-artifact-macos-${{ matrix.os == 'macos-14' && 'arm64' || 'x86_64' }}-prebuild
+          name: ncbcc-artifact-macos-${{ matrix.os == 'macos-15' && 'arm64' || 'x86_64' }}-prebuild
           run-id: ${{ inputs.prebuilds_run_id != '' && inputs.prebuilds_run_id || needs.build-prebuilds.outputs.workflow_run_id }}
           github-token: ${{ github.token }}
           path: prebuilds

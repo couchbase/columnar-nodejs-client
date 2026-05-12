@@ -36,6 +36,9 @@ on:
         default: ""
         type: string
 
+permissions:
+  contents: read
+
 env:
   DEFAULT_NODE: "20"
 
@@ -231,7 +234,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["macos-13", "macos-14"]
+        os: ["macos-15-intel", "macos-15"]
         node-version: ["20", "22", "24"]
     steps:
       - name: Setup Node.js
