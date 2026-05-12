@@ -15,6 +15,8 @@
  *  limitations under the License.
  */
 
+'use strict'
+
 const prebuilds = require('./prebuilds')
 const os = require('os')
 

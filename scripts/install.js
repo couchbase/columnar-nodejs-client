@@ -15,6 +15,8 @@
  *  limitations under the License.
  */
 
+'use strict'
+
 const path = require('path')
 const prebuilds = require('./prebuilds')
 
